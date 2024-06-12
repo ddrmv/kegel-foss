@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
@@ -33,6 +34,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.painter.Painter
@@ -42,9 +44,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kegelfoss.ui.theme.KegelFOSSTheme
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 
 /**
@@ -186,7 +190,7 @@ fun ExerciseScreen(settingsManager: SettingsManager) {
             ) {
                 Text(
                     text = "Squeeze ${settings.squeezeSeconds}s  -  Relax ${settings.relaxSeconds}s  -  Times ${settings.repetitions}x",
-                    modifier = Modifier.padding(8.dp)
+                    modifier = Modifier.padding(top = 24.dp, start = 8.dp, end = 8.dp, bottom = 8.dp)
                 )
                 Text(
                     text = "Total time: " + (settings.repetitions * (settings.squeezeSeconds + settings.relaxSeconds)).toString() + "s",
@@ -205,7 +209,6 @@ fun ExerciseScreen(settingsManager: SettingsManager) {
     }
 }
 
-
 @Composable
 fun ExerciseProgressIndicator(squeezeSeconds: Int, relaxSeconds: Int, repetitions: Int) {
     var progress by remember { mutableFloatStateOf(0f) }
@@ -215,77 +218,125 @@ fun ExerciseProgressIndicator(squeezeSeconds: Int, relaxSeconds: Int, repetition
     var currentPhase by remember { mutableStateOf("Squeeze") }
     var currentRep by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(Unit) {
-        for (rep in 0 until repetitions) {
+    val coroutineScope = rememberCoroutineScope()
+    var exerciseJob by remember { mutableStateOf<Job?>(null) }
+    var isRunning by remember { mutableStateOf(false) }
 
-            currentRep = rep + 1
+    LaunchedEffect(isRunning) {
+        if (isRunning && exerciseJob == null) {
+            exerciseJob = coroutineScope.launch {
+                for (rep in 0 until repetitions) {
+                    currentRep = rep + 1
 
-            // Squeeze phase
-            currentPhase = "Squeeze"
-            for (i in 0..squeezeSeconds) {
-                progress = i.toFloat() / squeezeSeconds
-                currentSeconds = i
-                delay(1000L)
-            }
+                    // Squeeze phase
+                    currentPhase = "Squeeze"
+                    for (i in 0..squeezeSeconds) {
+                        progress = i.toFloat() / squeezeSeconds
+                        currentSeconds = i
+                        delay(1000L)
+                    }
 
-            // Relax phase
-            currentPhase = "Relax"
-            for (i in relaxSeconds downTo 0) {
-                progress = i.toFloat() / relaxSeconds
-                currentSeconds = i
-                delay(1000L)
+                    // Relax phase
+                    currentPhase = "Relax"
+                    for (i in relaxSeconds downTo 0) {
+                        progress = i.toFloat() / relaxSeconds
+                        currentSeconds = i
+                        delay(1000L)
+                    }
+                }
+                isRunning = false // End of exercise, reset running state
+                exerciseJob = null
             }
         }
     }
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(300.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
+            .fillMaxHeight(),
+        verticalArrangement = Arrangement.SpaceEvenly,
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(
-                progress = 1f,
-                strokeWidth = 20.dp,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f),
-                modifier = Modifier
-                    .width(260.dp)
-                    .height(260.dp)
-            )
-            CircularProgressIndicator(
-                progress = animatedProgress,
-                strokeWidth = 20.dp,
-                color = if (currentPhase == "Squeeze") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
-                modifier = Modifier
-                    .width(260.dp)
-                    .height(260.dp)
-            )
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-                modifier = Modifier
-                    .fillMaxSize()
-            ) {
-                Text(
-                    text = "$currentSeconds s",
-                    fontSize = 48.sp,
-                    fontWeight = FontWeight.Bold,
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(300.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(
+                    progress = 1f,
+                    strokeWidth = 20.dp,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f),
+                    modifier = Modifier
+                        .width(260.dp)
+                        .height(260.dp)
+                )
+                CircularProgressIndicator(
+                    progress = animatedProgress,
+                    strokeWidth = 20.dp,
                     color = if (currentPhase == "Squeeze") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier
+                        .width(260.dp)
+                        .height(260.dp)
                 )
-                Text(
-                    text = currentPhase,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (currentPhase == "Squeeze") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
-                )
-                Text(
-                    text = "($currentRep/$repetitions)",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (currentPhase == "Squeeze") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier
+                        .fillMaxSize()
+                ) {
+                    Text(
+                        text = "$currentSeconds s",
+                        fontSize = 48.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (currentPhase == "Squeeze") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+                    )
+                    Text(
+                        text = currentPhase,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (currentPhase == "Squeeze") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                    )
+                    Text(
+                        text = "($currentRep/$repetitions)",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (currentPhase == "Squeeze") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            Button(
+                onClick = {
+                    // Start the coroutine
+                    isRunning = true
+                },
+                enabled = !isRunning
+            ) {
+                Text("Start")
+            }
+
+            Button(
+                onClick = {
+                    exerciseJob?.cancel()
+                    exerciseJob = null
+                    isRunning = false
+                    progress = 0f
+                    currentSeconds = 0
+                    currentPhase = "Squeeze"
+                    currentRep = 0
+                },
+                enabled = isRunning
+            ) {
+                Text("Reset")
             }
         }
     }
