@@ -6,6 +6,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,25 +14,35 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.kegelfoss.ui.theme.KegelFOSSTheme
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -61,7 +72,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun KegelFOSSThemeWithDarkMode(
     settingsManager: SettingsManager,
-    content: @Composable() () -> Unit
+    content: @Composable () -> Unit
 ) {
     val settings by settingsManager.settingsFlow.collectAsState()
     KegelFOSSTheme(darkTheme = settings.darkMode, content = content)
@@ -120,6 +131,8 @@ class SettingsManager(context: Context) {
  * TabLayout displays three tabs: Exercise, Stats, and Settings and the content of the selected tab.
  */
 
+data class TabItem(val title: String, val icon: Painter)
+
 @Composable
 fun TabLayout(settingsManager: SettingsManager, modifier: Modifier = Modifier) {
     val tabs = listOf(
@@ -132,7 +145,7 @@ fun TabLayout(settingsManager: SettingsManager, modifier: Modifier = Modifier) {
         TabRow(selectedTabIndex = currentTab) {
             tabs.forEachIndexed { index, tabItem ->
                 Tab(
-                    text = { Text(tabItem.title) },
+                    text = { Text(text = tabItem.title) },
                     icon = { Icon(tabItem.icon, contentDescription = null) },
                     selected = currentTab == index,
                     onClick = { setCurrentTab(index) }
@@ -147,6 +160,14 @@ fun TabLayout(settingsManager: SettingsManager, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * ExerciseScreen displays the exercise screen, which is the main screen of the app.
+ *
+ *
+ *
+ *
+ *
+ */
 
 @Composable
 fun ExerciseScreen(settingsManager: SettingsManager) {
@@ -156,7 +177,120 @@ fun ExerciseScreen(settingsManager: SettingsManager) {
         // TODO: Add code to vibrate the device
         Unit
     }
+
+    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Squeeze ${settings.squeezeSeconds}s  -  Relax ${settings.relaxSeconds}s  -  Times ${settings.repetitions}x",
+                    modifier = Modifier.padding(8.dp)
+                )
+                Text(
+                    text = "Total time: " + (settings.repetitions * (settings.squeezeSeconds + settings.relaxSeconds)).toString() + "s",
+                    modifier = Modifier
+                )
+            }
+        }
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            ExerciseProgressIndicator(
+                settings.squeezeSeconds,
+                settings.relaxSeconds,
+                settings.repetitions
+            )
+        }
+    }
 }
+
+
+@Composable
+fun ExerciseProgressIndicator(squeezeSeconds: Int, relaxSeconds: Int, repetitions: Int) {
+    var progress by remember { mutableFloatStateOf(0f) }
+    val animatedProgress by animateFloatAsState(progress, label = "Progress Animation")
+
+    var currentSeconds by remember { mutableIntStateOf(0) }
+    var currentPhase by remember { mutableStateOf("Squeeze") }
+    var currentRep by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        for (rep in 0 until repetitions) {
+
+            currentRep = rep + 1
+
+            // Squeeze phase
+            currentPhase = "Squeeze"
+            for (i in 0..squeezeSeconds) {
+                progress = i.toFloat() / squeezeSeconds
+                currentSeconds = i
+                delay(1000L)
+            }
+
+            // Relax phase
+            currentPhase = "Relax"
+            for (i in relaxSeconds downTo 0) {
+                progress = i.toFloat() / relaxSeconds
+                currentSeconds = i
+                delay(1000L)
+            }
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(300.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(
+                progress = 1f,
+                strokeWidth = 20.dp,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.2f),
+                modifier = Modifier
+                    .width(260.dp)
+                    .height(260.dp)
+            )
+            CircularProgressIndicator(
+                progress = animatedProgress,
+                strokeWidth = 20.dp,
+                color = if (currentPhase == "Squeeze") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+                modifier = Modifier
+                    .width(260.dp)
+                    .height(260.dp)
+            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .fillMaxSize()
+            ) {
+                Text(
+                    text = "$currentSeconds s",
+                    fontSize = 48.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (currentPhase == "Squeeze") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+                )
+                Text(
+                    text = currentPhase,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (currentPhase == "Squeeze") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                )
+                Text(
+                    text = "($currentRep/$repetitions)",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (currentPhase == "Squeeze") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                )
+            }
+        }
+    }
+}
+
 
 @Composable
 fun StatsScreen() {
@@ -165,6 +299,11 @@ fun StatsScreen() {
 
 /**
  * SettingsScreen displays the settings of the app and allows the user to change them.
+ *
+ *
+ *
+ *
+ *
  */
 
 @Composable
@@ -280,6 +419,3 @@ fun SettingsOptionToggle(
         )
     }
 }
-
-
-data class TabItem(val title: String, val icon: Painter)
