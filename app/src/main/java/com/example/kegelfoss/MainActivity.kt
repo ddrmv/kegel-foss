@@ -48,13 +48,23 @@ class MainActivity : ComponentActivity() {
         settingsManager = SettingsManager(this)
         enableEdgeToEdge()
         setContent {
-            KegelFOSSTheme {
+            KegelFOSSThemeWithDarkMode(settingsManager) {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     TabLayout(settingsManager, Modifier.padding(innerPadding))
                 }
             }
         }
     }
+}
+
+
+@Composable
+fun KegelFOSSThemeWithDarkMode(
+    settingsManager: SettingsManager,
+    content: @Composable() () -> Unit
+) {
+    val settings by settingsManager.settingsFlow.collectAsState()
+    KegelFOSSTheme(darkTheme = settings.darkMode, content = content)
 }
 
 
@@ -74,7 +84,8 @@ data class Settings(
 
 
 class SettingsManager(context: Context) {
-    private val sharedPreferences: SharedPreferences = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    private val sharedPreferences: SharedPreferences =
+        context.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
     private val _settingsFlow by lazy { MutableStateFlow(loadSettings()) }
     val settingsFlow: StateFlow<Settings> = _settingsFlow
@@ -205,14 +216,14 @@ fun SettingsScreen(settingsManager: SettingsManager) {
         }
     )
 
-//    SettingsOptionToggle(
-//        title = "Dark Mode",
-//        value = settings.darkMode,
-//        onValueChange = { isChecked ->
-//            val newSettings = settings.copy(darkMode = isChecked)
-//            settingsManager.saveSettings(newSettings)
-//        }
-//    )
+    SettingsOptionToggle(
+        title = "Dark Mode",
+        value = settings.darkMode,
+        onValueChange = { isChecked ->
+            val newSettings = settings.copy(darkMode = isChecked)
+            settingsManager.saveSettings(newSettings)
+        }
+    )
 }
 
 
@@ -230,9 +241,9 @@ fun SettingsOptionStepper(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(text = title)
-        Row(verticalAlignment = Alignment.CenterVertically){
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = {
-                if(value > 1) {
+                if (value > 1) {
                     onValueChange(value - 1)
                 }
             }) {
