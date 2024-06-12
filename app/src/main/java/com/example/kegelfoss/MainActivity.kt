@@ -6,10 +6,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -25,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
 import com.example.kegelfoss.ui.theme.KegelFOSSTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -60,7 +66,7 @@ class MainActivity : ComponentActivity() {
 data class Settings(
     var squeezeSeconds: Int = 3,
     var relaxSeconds: Int = 3,
-    var reps: Int = 10,
+    var repetitions: Int = 10,
     var vibrationEnabled: Boolean = true,
     var soundEnabled: Boolean = false,
     var darkMode: Boolean = false
@@ -77,7 +83,7 @@ class SettingsManager(context: Context) {
         return Settings(
             squeezeSeconds = sharedPreferences.getInt("squeezeSeconds", 3),
             relaxSeconds = sharedPreferences.getInt("relaxSeconds", 3),
-            reps = sharedPreferences.getInt("reps", 10),
+            repetitions = sharedPreferences.getInt("repetitions", 10),
             vibrationEnabled = sharedPreferences.getBoolean("vibrationEnabled", true),
             soundEnabled = sharedPreferences.getBoolean("soundEnabled", false),
             darkMode = sharedPreferences.getBoolean("darkMode", false)
@@ -88,7 +94,7 @@ class SettingsManager(context: Context) {
         sharedPreferences.edit()
             .putInt("squeezeSeconds", settings.squeezeSeconds)
             .putInt("relaxSeconds", settings.relaxSeconds)
-            .putInt("reps", settings.reps)
+            .putInt("repetitions", settings.repetitions)
             .putBoolean("vibrationEnabled", settings.vibrationEnabled)
             .putBoolean("soundEnabled", settings.soundEnabled)
             .putBoolean("darkMode", settings.darkMode)
@@ -154,16 +160,115 @@ fun StatsScreen() {
 fun SettingsScreen(settingsManager: SettingsManager) {
     val settings by settingsManager.settingsFlow.collectAsState()
 
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(text = "Vibration")
-        Switch(
-            checked = settings.vibrationEnabled,
-            onCheckedChange = { isChecked ->
-                val newSettings = settings.copy(vibrationEnabled = isChecked)
-                settingsManager.saveSettings(newSettings)
+    SettingsOptionStepper(
+        title = "Squeeze Seconds",
+        value = settings.squeezeSeconds,
+        onValueChange = { newValue ->
+            val newSettings = settings.copy(squeezeSeconds = newValue)
+            settingsManager.saveSettings(newSettings)
+        }
+    )
+
+    SettingsOptionStepper(
+        title = "Relax Seconds",
+        value = settings.relaxSeconds,
+        onValueChange = { newValue ->
+            val newSettings = settings.copy(relaxSeconds = newValue)
+            settingsManager.saveSettings(newSettings)
+        }
+    )
+
+    SettingsOptionStepper(
+        title = "Repetitions",
+        value = settings.repetitions,
+        onValueChange = { newValue ->
+            val newSettings = settings.copy(repetitions = newValue)
+            settingsManager.saveSettings(newSettings)
+        }
+    )
+
+    SettingsOptionToggle(
+        title = "Vibration",
+        value = settings.vibrationEnabled,
+        onValueChange = { isChecked ->
+            val newSettings = settings.copy(vibrationEnabled = isChecked)
+            settingsManager.saveSettings(newSettings)
+        }
+    )
+
+    SettingsOptionToggle(
+        title = "Sound",
+        value = settings.soundEnabled,
+        onValueChange = { isChecked ->
+            val newSettings = settings.copy(soundEnabled = isChecked)
+            settingsManager.saveSettings(newSettings)
+        }
+    )
+
+//    SettingsOptionToggle(
+//        title = "Dark Mode",
+//        value = settings.darkMode,
+//        onValueChange = { isChecked ->
+//            val newSettings = settings.copy(darkMode = isChecked)
+//            settingsManager.saveSettings(newSettings)
+//        }
+//    )
+}
+
+
+@Composable
+fun SettingsOptionStepper(
+    title: String,
+    value: Int,
+    onValueChange: (Int) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(text = title)
+        Row(verticalAlignment = Alignment.CenterVertically){
+            Button(onClick = {
+                if(value > 1) {
+                    onValueChange(value - 1)
+                }
+            }) {
+                Text("<")
             }
+            Box(modifier = Modifier.width(42.dp), contentAlignment = Alignment.Center) {
+                Text(text = value.toString())
+            }
+            Button(onClick = { onValueChange(value + 1) }) {
+                Text(">")
+            }
+        }
+    }
+}
+
+
+@Composable
+fun SettingsOptionToggle(
+    title: String,
+    value: Boolean,
+    onValueChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(text = title)
+        Switch(
+            checked = value,
+            onCheckedChange = onValueChange
         )
     }
 }
+
 
 data class TabItem(val title: String, val icon: Painter)
