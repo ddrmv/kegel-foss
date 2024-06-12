@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +54,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 
 /**
@@ -98,7 +100,9 @@ data class Settings(
     var repetitions: Int = 10,
     var vibrationEnabled: Boolean = true,
     var soundEnabled: Boolean = false,
-    var darkMode: Boolean = false
+    var darkMode: Boolean = false,
+    var totalTime: Int = 0,
+    var completedSets: Int = 0
 )
 
 
@@ -116,7 +120,9 @@ class SettingsManager(context: Context) {
             repetitions = sharedPreferences.getInt("repetitions", 10),
             vibrationEnabled = sharedPreferences.getBoolean("vibrationEnabled", true),
             soundEnabled = sharedPreferences.getBoolean("soundEnabled", false),
-            darkMode = sharedPreferences.getBoolean("darkMode", false)
+            darkMode = sharedPreferences.getBoolean("darkMode", false),
+            totalTime = sharedPreferences.getInt("totalTime", 0),
+            completedSets = sharedPreferences.getInt("completedSets", 0)
         )
     }
 
@@ -128,6 +134,8 @@ class SettingsManager(context: Context) {
             .putBoolean("vibrationEnabled", settings.vibrationEnabled)
             .putBoolean("soundEnabled", settings.soundEnabled)
             .putBoolean("darkMode", settings.darkMode)
+            .putInt("totalTime", settings.totalTime)
+            .putInt("completedSets", settings.completedSets)
             .apply()
 
         _settingsFlow.value = settings
@@ -162,7 +170,7 @@ fun TabLayout(settingsManager: SettingsManager, modifier: Modifier = Modifier) {
         }
         when (currentTab) {
             0 -> ExerciseScreen(settingsManager)
-            1 -> StatsScreen()
+            1 -> StatsScreen(settingsManager)
             2 -> SettingsScreen(settingsManager)
         }
     }
@@ -181,11 +189,6 @@ fun TabLayout(settingsManager: SettingsManager, modifier: Modifier = Modifier) {
 fun ExerciseScreen(settingsManager: SettingsManager) {
     val settings = settingsManager.loadSettings()
 
-    if (settings.vibrationEnabled) {
-        // TODO: Add code to vibrate the device
-        Unit
-    }
-
     Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             Column(
@@ -194,10 +197,15 @@ fun ExerciseScreen(settingsManager: SettingsManager) {
             ) {
                 Text(
                     text = "Squeeze ${settings.squeezeSeconds}s  -  Relax ${settings.relaxSeconds}s  -  Times ${settings.repetitions}x",
-                    modifier = Modifier.padding(top = 24.dp, start = 8.dp, end = 8.dp, bottom = 8.dp)
+                    modifier = Modifier.padding(
+                        top = 24.dp,
+                        start = 8.dp,
+                        end = 8.dp,
+                        bottom = 8.dp
+                    )
                 )
                 Text(
-                    text = "Total time: " + (settings.repetitions * (settings.squeezeSeconds + settings.relaxSeconds)).toString() + "s",
+                    text = "Total time for set: " + (settings.repetitions * (settings.squeezeSeconds + settings.relaxSeconds)).toString() + "s",
                     modifier = Modifier
                 )
             }
@@ -205,6 +213,7 @@ fun ExerciseScreen(settingsManager: SettingsManager) {
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             ExerciseProgressIndicator(
+                settingsManager,
                 settings.squeezeSeconds,
                 settings.relaxSeconds,
                 settings.repetitions,
@@ -216,11 +225,13 @@ fun ExerciseScreen(settingsManager: SettingsManager) {
 
 @Composable
 fun ExerciseProgressIndicator(
+    settingsManager: SettingsManager,
     squeezeSeconds: Int,
     relaxSeconds: Int,
     repetitions: Int,
     vibrationEnabled: Boolean
 ) {
+    val settings by settingsManager.settingsFlow.collectAsState()
     var progress by remember { mutableFloatStateOf(0f) }
     val animatedProgress by animateFloatAsState(progress, label = "Progress Animation")
 
@@ -240,7 +251,12 @@ fun ExerciseProgressIndicator(
     fun vibrate() {
         if (vibrationEnabled) {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                vibrator?.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE))
+                vibrator?.vibrate(
+                    VibrationEffect.createOneShot(
+                        500,
+                        VibrationEffect.DEFAULT_AMPLITUDE
+                    )
+                )
             } else {
                 if (vibrator != null) {
                     @Suppress("DEPRECATION")
@@ -274,6 +290,13 @@ fun ExerciseProgressIndicator(
                         delay(1000L)
                     }
                 }
+
+                val newSettings = settings.copy(
+                    completedSets = settings.completedSets + 1,
+                    totalTime = settings.totalTime + repetitions * (squeezeSeconds + relaxSeconds)
+                )
+                settingsManager.saveSettings(newSettings)
+
                 isRunning = false // End of exercise, reset running state
                 exerciseJob = null
             }
@@ -376,7 +399,46 @@ fun ExerciseProgressIndicator(
 
 
 @Composable
-fun StatsScreen() {
+fun StatsScreen(settingsManager: SettingsManager) {
+    val settings by settingsManager.settingsFlow.collectAsState()
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Card(
+            modifier = Modifier
+                .padding(16.dp)
+                .width(300.dp),
+            shape = MaterialTheme.shapes.medium,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Completed Sets:", fontSize = 24.sp)
+                    Text("${settings.completedSets}", fontSize = 48.sp)
+                }
+            }
+        }
+
+        Card(
+            modifier = Modifier
+                .padding(16.dp)
+                .width(300.dp),
+            shape = MaterialTheme.shapes.medium,
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Total Time:", fontSize = 24.sp)
+                val hours = settings.totalTime / 3600
+                val minutes = (settings.totalTime % 3600) / 60
+                val seconds = settings.totalTime % 60
+                Text(
+                    String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds),
+                    fontSize = 48.sp
+                )
+            }
+        }
+    }
 }
 
 
