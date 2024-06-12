@@ -3,6 +3,8 @@ package com.example.kegelfoss
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -39,10 +41,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.example.kegelfoss.ui.theme.KegelFOSSTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -203,14 +207,20 @@ fun ExerciseScreen(settingsManager: SettingsManager) {
             ExerciseProgressIndicator(
                 settings.squeezeSeconds,
                 settings.relaxSeconds,
-                settings.repetitions
+                settings.repetitions,
+                settings.vibrationEnabled
             )
         }
     }
 }
 
 @Composable
-fun ExerciseProgressIndicator(squeezeSeconds: Int, relaxSeconds: Int, repetitions: Int) {
+fun ExerciseProgressIndicator(
+    squeezeSeconds: Int,
+    relaxSeconds: Int,
+    repetitions: Int,
+    vibrationEnabled: Boolean
+) {
     var progress by remember { mutableFloatStateOf(0f) }
     val animatedProgress by animateFloatAsState(progress, label = "Progress Animation")
 
@@ -222,6 +232,24 @@ fun ExerciseProgressIndicator(squeezeSeconds: Int, relaxSeconds: Int, repetition
     var exerciseJob by remember { mutableStateOf<Job?>(null) }
     var isRunning by remember { mutableStateOf(false) }
 
+    // Get the Vibrator service
+    val context = LocalContext.current
+    val vibrator = remember { ContextCompat.getSystemService(context, Vibrator::class.java) }
+
+    // Function to vibrate the phone
+    fun vibrate() {
+        if (vibrationEnabled) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                vibrator?.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                if (vibrator != null) {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(500)
+                }
+            }
+        }
+    }
+
     LaunchedEffect(isRunning) {
         if (isRunning && exerciseJob == null) {
             exerciseJob = coroutineScope.launch {
@@ -230,6 +258,7 @@ fun ExerciseProgressIndicator(squeezeSeconds: Int, relaxSeconds: Int, repetition
 
                     // Squeeze phase
                     currentPhase = "Squeeze"
+                    vibrate()
                     for (i in 0..squeezeSeconds) {
                         progress = i.toFloat() / squeezeSeconds
                         currentSeconds = i
@@ -238,6 +267,7 @@ fun ExerciseProgressIndicator(squeezeSeconds: Int, relaxSeconds: Int, repetition
 
                     // Relax phase
                     currentPhase = "Relax"
+                    vibrate()
                     for (i in relaxSeconds downTo 0) {
                         progress = i.toFloat() / relaxSeconds
                         currentSeconds = i
@@ -326,9 +356,11 @@ fun ExerciseProgressIndicator(squeezeSeconds: Int, relaxSeconds: Int, repetition
 
             Button(
                 onClick = {
+                    // Stop the coroutine
                     exerciseJob?.cancel()
                     exerciseJob = null
                     isRunning = false
+                    // Reset the state variables
                     progress = 0f
                     currentSeconds = 0
                     currentPhase = "Squeeze"
