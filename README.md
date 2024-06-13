@@ -2,29 +2,10 @@
 
 Kegel exercises Android application developed using Kotlin and Android Jetpack Compose.
 
-<div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap;">
-
-<figure style="text-align: center; margin: 5px;">
-  <img src="https://i.imgur.com/BgxTf8F.png" height="280" alt="Main Screen">
-  <figcaption>Main Screen</figcaption>
-</figure>
-
-<figure style="text-align: center; margin: 5px;">
-  <img src="https://i.imgur.com/D8nz29Y.png" height="280" alt="Settings Screen">
-  <figcaption>Stats</figcaption>
-</figure>
-
-<figure style="text-align: center; margin: 5px;">
-  <img src="https://i.imgur.com/nasZV4I.png" height="280" alt="Exercise Screen">
-  <figcaption>Settings</figcaption>
-</figure>
-
-<figure style="text-align: center; margin: 5px;">
-  <img src="https://i.imgur.com/oIWyXOM.png" height="280" alt="Statistics Screen">
-  <figcaption>Main in Dark Mode</figcaption>
-</figure>
-
-</div>
+<img src="https://i.imgur.com/BgxTf8F.png" height="280" alt="Exercise Screen">
+<img src="https://i.imgur.com/D8nz29Y.png" height="280" alt="Stats Screen">
+<img src="https://i.imgur.com/nasZV4I.png" height="280" alt="Settings Screen">
+<img src="https://i.imgur.com/oIWyXOM.png" height="280" alt="Exercise Screen in Dark Mode">
 
 ## Features
 
