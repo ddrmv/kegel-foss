@@ -95,14 +95,14 @@ fun KegelFOSSThemeWithDarkMode(
  */
 
 data class Settings(
-    var squeezeSeconds: Int = 3,
-    var relaxSeconds: Int = 3,
-    var repetitions: Int = 10,
-    var vibrationEnabled: Boolean = true,
-    var soundEnabled: Boolean = false,
-    var darkMode: Boolean = false,
-    var totalTime: Int = 0,
-    var completedSets: Int = 0
+    var squeezeSeconds: Int,
+    var relaxSeconds: Int,
+    var repetitions: Int,
+    var vibrationEnabled: Boolean,
+    var soundEnabled: Boolean,
+    var darkMode: Boolean,
+    var totalTime: Int,
+    var completedSets: Int
 )
 
 
