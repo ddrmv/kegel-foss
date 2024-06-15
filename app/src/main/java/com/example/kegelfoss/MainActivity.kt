@@ -1,6 +1,7 @@
 package com.example.kegelfoss
 
 import android.content.Context
+import android.media.SoundPool
 import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -74,19 +75,28 @@ import java.util.Locale
 class MainActivity : ComponentActivity() {
     private lateinit var settingsRepository: SettingsRepository
     private lateinit var settingsViewModel: SettingsViewModel
+    private lateinit var soundPool: SoundPool
+    private var soundId: Int = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         settingsRepository = SettingsRepository(this)
         settingsViewModel = SettingsViewModel(settingsRepository)
+        soundPool = SoundPool.Builder().setMaxStreams(1).build()
+        soundId = soundPool.load(this, R.raw.chime, 1)
         enableEdgeToEdge()
         setContent {
             KegelFOSSThemeWithDarkMode(settingsViewModel) {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    TabLayout(settingsViewModel, Modifier.padding(innerPadding))
+                    TabLayout(settingsViewModel, Modifier.padding(innerPadding), soundPool, soundId)
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        soundPool.release()
     }
 }
 
@@ -211,7 +221,7 @@ class SettingsViewModel(private val settingsRepository: SettingsRepository) : Vi
 data class TabItem(val title: String, val icon: Painter)
 
 @Composable
-fun TabLayout(settingsViewModel: SettingsViewModel, modifier: Modifier = Modifier) {
+fun TabLayout(settingsViewModel: SettingsViewModel, modifier: Modifier = Modifier, soundPool: SoundPool, soundId: Int) {
     val tabs = listOf(
         TabItem("Exercise", painterResource(R.drawable.check_decagram)),
         TabItem("Stats", painterResource(R.drawable.chart_box)),
@@ -230,7 +240,7 @@ fun TabLayout(settingsViewModel: SettingsViewModel, modifier: Modifier = Modifie
             }
         }
         when (currentTab) {
-            0 -> ExerciseScreen(settingsViewModel)
+            0 -> ExerciseScreen(settingsViewModel, soundPool, soundId)
             1 -> StatsScreen(settingsViewModel)
             2 -> SettingsScreen(settingsViewModel)
         }
@@ -247,7 +257,7 @@ fun TabLayout(settingsViewModel: SettingsViewModel, modifier: Modifier = Modifie
  */
 
 @Composable
-fun ExerciseScreen(settingsViewModel: SettingsViewModel) {
+fun ExerciseScreen(settingsViewModel: SettingsViewModel, soundPool: SoundPool, soundId: Int) {
     val squeezeSeconds by settingsViewModel.squeezeSecondsFlow.collectAsState()
     val relaxSeconds by settingsViewModel.relaxSecondsFlow.collectAsState()
     val repetitions by settingsViewModel.repetitionsFlow.collectAsState()
@@ -275,7 +285,7 @@ fun ExerciseScreen(settingsViewModel: SettingsViewModel) {
         }
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            ExerciseProgressIndicator(settingsViewModel)
+            ExerciseProgressIndicator(settingsViewModel, soundPool, soundId)
         }
     }
 }
@@ -284,11 +294,14 @@ fun ExerciseScreen(settingsViewModel: SettingsViewModel) {
 @Composable
 fun ExerciseProgressIndicator(
     settingsViewModel: SettingsViewModel,
+    soundPool: SoundPool,
+    soundId: Int
 ) {
     val squeezeSeconds by settingsViewModel.squeezeSecondsFlow.collectAsState()
     val relaxSeconds by settingsViewModel.relaxSecondsFlow.collectAsState()
     val repetitions by settingsViewModel.repetitionsFlow.collectAsState()
     val vibrationEnabled by settingsViewModel.vibrationEnabledFlow.collectAsState()
+    val soundEnabled by settingsViewModel.soundEnabledFlow.collectAsState()
     val totalTime by settingsViewModel.totalTimeFlow.collectAsState()
     val completedSets by settingsViewModel.completedSetsFlow.collectAsState()
 
@@ -324,6 +337,13 @@ fun ExerciseProgressIndicator(
         }
     }
 
+    // Function to play sound
+    fun playSound() {
+        if (soundEnabled) {
+            soundPool.play(soundId, 1f, 1f, 1, 0, 1f)
+        }
+    }
+
     LaunchedEffect(isRunning) {
         if (isRunning && exerciseJob == null) {
             exerciseJob = coroutineScope.launch {
@@ -333,6 +353,7 @@ fun ExerciseProgressIndicator(
                     // Squeeze phase
                     currentPhase = "Squeeze"
                     vibrate()
+                    playSound()
                     for (i in 0 .. squeezeSeconds) {
                         progress = i.toFloat() / squeezeSeconds
                         currentSeconds = squeezeSeconds - i
@@ -342,12 +363,16 @@ fun ExerciseProgressIndicator(
                     // Relax phase
                     currentPhase = "Relax"
                     vibrate()
+                    playSound()
                     for (i in relaxSeconds downTo 0) {
                         progress = i.toFloat() / relaxSeconds
                         currentSeconds = i
                         delay(1000L)
                     }
                 }
+
+                vibrate()
+                playSound()
 
                 // Update the total time and completed sets
                 settingsViewModel.updateSettings(
