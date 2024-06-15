@@ -282,11 +282,15 @@ fun ExerciseScreen(settingsViewModel: SettingsViewModel) {
 
 
 @Composable
-fun ExerciseProgressIndicator(settingsViewModel: SettingsViewModel) {
+fun ExerciseProgressIndicator(
+    settingsViewModel: SettingsViewModel,
+) {
     val squeezeSeconds by settingsViewModel.squeezeSecondsFlow.collectAsState()
     val relaxSeconds by settingsViewModel.relaxSecondsFlow.collectAsState()
     val repetitions by settingsViewModel.repetitionsFlow.collectAsState()
     val vibrationEnabled by settingsViewModel.vibrationEnabledFlow.collectAsState()
+    val totalTime by settingsViewModel.totalTimeFlow.collectAsState()
+    val completedSets by settingsViewModel.completedSetsFlow.collectAsState()
 
     var progress by remember { mutableFloatStateOf(0f) }
     val animatedProgress by animateFloatAsState(progress, label = "Progress Animation")
@@ -314,10 +318,8 @@ fun ExerciseProgressIndicator(settingsViewModel: SettingsViewModel) {
                     )
                 )
             } else {
-                if (vibrator != null) {
-                    @Suppress("DEPRECATION")
-                    vibrator.vibrate(500)
-                }
+                @Suppress("DEPRECATION")
+                vibrator?.vibrate(500)
             }
         }
     }
@@ -350,8 +352,8 @@ fun ExerciseProgressIndicator(settingsViewModel: SettingsViewModel) {
                 // Update the total time and completed sets
                 settingsViewModel.updateSettings(
                     settingsViewModel.settingsFlow.value.copy(
-                        totalTime = settingsViewModel.settingsFlow.value.totalTime + repetitions * (squeezeSeconds + relaxSeconds),
-                        completedSets = settingsViewModel.settingsFlow.value.completedSets + 1
+                        totalTime = totalTime + repetitions * (squeezeSeconds + relaxSeconds),
+                        completedSets = completedSets + 1
                     )
                 )
 
@@ -519,6 +521,10 @@ fun SettingsScreen(settingsViewModel: SettingsViewModel) {
     val vibrationEnabled by settingsViewModel.vibrationEnabledFlow.collectAsState()
     val soundEnabled by settingsViewModel.soundEnabledFlow.collectAsState()
     val darkMode by settingsViewModel.darkModeFlow.collectAsState()
+    @Suppress("UNUSED_VARIABLE")
+    val totalTime by settingsViewModel.totalTimeFlow.collectAsState()
+    @Suppress("UNUSED_VARIABLE")
+    val completedSets by settingsViewModel.completedSetsFlow.collectAsState()
 
     SettingsOptionStepper(
         title = "Squeeze Seconds",
