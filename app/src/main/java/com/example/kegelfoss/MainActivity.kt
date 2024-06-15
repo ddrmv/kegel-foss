@@ -161,7 +161,13 @@ class SettingsViewModel(private val settingsRepository: SettingsRepository) : Vi
         .stateIn(
             viewModelScope,
             SharingStarted.Eagerly,
-            Settings(3, 3, 10, true, false, false, 0, 0)
+            Settings(3, 3, 10,
+                vibrationEnabled = true,
+                soundEnabled = false,
+                darkMode = false,
+                totalTime = 0,
+                completedSets = 0
+            )
         )
 
     val settingsFlow: StateFlow<Settings> = _settingsFlow
