@@ -1,7 +1,6 @@
 package com.example.kegelfoss
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -48,11 +47,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import com.example.kegelfoss.ui.theme.KegelFOSSTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -62,16 +72,18 @@ import java.util.Locale
  */
 
 class MainActivity : ComponentActivity() {
-    private lateinit var settingsManager: SettingsManager
+    private lateinit var settingsRepository: SettingsRepository
+    private lateinit var settingsViewModel: SettingsViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        settingsManager = SettingsManager(this)
+        settingsRepository = SettingsRepository(this)
+        settingsViewModel = SettingsViewModel(settingsRepository)
         enableEdgeToEdge()
         setContent {
-            KegelFOSSThemeWithDarkMode(settingsManager) {
+            KegelFOSSThemeWithDarkMode(settingsViewModel) {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    TabLayout(settingsManager, Modifier.padding(innerPadding))
+                    TabLayout(settingsViewModel, Modifier.padding(innerPadding))
                 }
             }
         }
@@ -81,64 +93,107 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun KegelFOSSThemeWithDarkMode(
-    settingsManager: SettingsManager,
+    settingsViewModel: SettingsViewModel,
     content: @Composable () -> Unit
 ) {
-    val settings by settingsManager.settingsFlow.collectAsState()
-    KegelFOSSTheme(darkTheme = settings.darkMode, content = content)
+    val darkMode by settingsViewModel.darkModeFlow.collectAsState()
+    KegelFOSSTheme(darkTheme = darkMode, content = content)
 }
 
 
-/**
- * SettingsManager is a class that manages the settings of the app.
- * It loads and saves the settings from and to SharedPreferences.
- */
+val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
-data class Settings(
-    var squeezeSeconds: Int,
-    var relaxSeconds: Int,
-    var repetitions: Int,
-    var vibrationEnabled: Boolean,
-    var soundEnabled: Boolean,
-    var darkMode: Boolean,
-    var totalTime: Int,
-    var completedSets: Int
-)
+class SettingsRepository(private val context: Context) {
 
-
-class SettingsManager(context: Context) {
-    private val sharedPreferences: SharedPreferences =
-        context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-
-    private val _settingsFlow by lazy { MutableStateFlow(loadSettings()) }
-    val settingsFlow: StateFlow<Settings> = _settingsFlow
-
-    fun loadSettings(): Settings {
-        return Settings(
-            squeezeSeconds = sharedPreferences.getInt("squeezeSeconds", 3),
-            relaxSeconds = sharedPreferences.getInt("relaxSeconds", 3),
-            repetitions = sharedPreferences.getInt("repetitions", 10),
-            vibrationEnabled = sharedPreferences.getBoolean("vibrationEnabled", true),
-            soundEnabled = sharedPreferences.getBoolean("soundEnabled", false),
-            darkMode = sharedPreferences.getBoolean("darkMode", false),
-            totalTime = sharedPreferences.getInt("totalTime", 0),
-            completedSets = sharedPreferences.getInt("completedSets", 0)
-        )
+    private object PreferenceKeys {
+        val squeezeSeconds = intPreferencesKey("squeezeSecondsKey")
+        val relaxSeconds = intPreferencesKey("relaxSecondsKey")
+        val repetitions = intPreferencesKey("repetitionsKey")
+        val vibrationEnabled = booleanPreferencesKey("vibrationEnabledKey")
+        val soundEnabled = booleanPreferencesKey("soundEnabledKey")
+        val darkMode = booleanPreferencesKey("darkModeKey")
+        val totalTime = intPreferencesKey("totalTimeKey")
+        val completedSets: Preferences.Key<Int> = intPreferencesKey("completedSetsKey")
     }
 
-    fun saveSettings(settings: Settings) {
-        sharedPreferences.edit()
-            .putInt("squeezeSeconds", settings.squeezeSeconds)
-            .putInt("relaxSeconds", settings.relaxSeconds)
-            .putInt("repetitions", settings.repetitions)
-            .putBoolean("vibrationEnabled", settings.vibrationEnabled)
-            .putBoolean("soundEnabled", settings.soundEnabled)
-            .putBoolean("darkMode", settings.darkMode)
-            .putInt("totalTime", settings.totalTime)
-            .putInt("completedSets", settings.completedSets)
-            .apply()
+    val settingsFlow: Flow<Settings> = context.dataStore.data
+        .map { preferences ->
+            Settings(
+                squeezeSeconds = preferences[PreferenceKeys.squeezeSeconds] ?: 3,
+                relaxSeconds = preferences[PreferenceKeys.relaxSeconds] ?: 3,
+                repetitions = preferences[PreferenceKeys.repetitions] ?: 10,
+                vibrationEnabled = preferences[PreferenceKeys.vibrationEnabled] ?: true,
+                soundEnabled = preferences[PreferenceKeys.soundEnabled] ?: false,
+                darkMode = preferences[PreferenceKeys.darkMode] ?: false,
+                totalTime = preferences[PreferenceKeys.totalTime] ?: 0,
+                completedSets = preferences[PreferenceKeys.completedSets] ?: 0
+            )
+        }
 
-        _settingsFlow.value = settings
+    suspend fun updateSettings(settings: Settings) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferenceKeys.squeezeSeconds] = settings.squeezeSeconds
+            preferences[PreferenceKeys.relaxSeconds] = settings.relaxSeconds
+            preferences[PreferenceKeys.repetitions] = settings.repetitions
+            preferences[PreferenceKeys.vibrationEnabled] = settings.vibrationEnabled
+            preferences[PreferenceKeys.soundEnabled] = settings.soundEnabled
+            preferences[PreferenceKeys.darkMode] = settings.darkMode
+            preferences[PreferenceKeys.totalTime] = settings.totalTime
+            preferences[PreferenceKeys.completedSets] = settings.completedSets
+        }
+    }
+}
+
+data class Settings(
+    val squeezeSeconds: Int,
+    val relaxSeconds: Int,
+    val repetitions: Int,
+    val vibrationEnabled: Boolean,
+    val soundEnabled: Boolean,
+    val darkMode: Boolean,
+    val totalTime: Int,
+    val completedSets: Int
+)
+
+class SettingsViewModel(private val settingsRepository: SettingsRepository) : ViewModel() {
+
+    private val _settingsFlow: StateFlow<Settings> = settingsRepository.settingsFlow
+        .stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            Settings(3, 3, 10, true, false, false, 0, 0)
+        )
+
+    val settingsFlow: StateFlow<Settings> = _settingsFlow
+
+    val squeezeSecondsFlow: StateFlow<Int> = settingsFlow.map { it.squeezeSeconds }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 3)
+
+    val relaxSecondsFlow: StateFlow<Int> = settingsFlow.map { it.relaxSeconds }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 3)
+
+    val repetitionsFlow: StateFlow<Int> = settingsFlow.map { it.repetitions }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 10)
+
+    val vibrationEnabledFlow: StateFlow<Boolean> = settingsFlow.map { it.vibrationEnabled }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), true)
+
+    val soundEnabledFlow: StateFlow<Boolean> = settingsFlow.map { it.soundEnabled }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
+
+    val darkModeFlow: StateFlow<Boolean> = settingsFlow.map { it.darkMode }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
+
+    val totalTimeFlow: StateFlow<Int> = settingsFlow.map { it.totalTime }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 0)
+
+    val completedSetsFlow: StateFlow<Int> = settingsFlow.map { it.completedSets }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), 0)
+
+    fun updateSettings(settings: Settings) {
+        viewModelScope.launch {
+            settingsRepository.updateSettings(settings)
+        }
     }
 }
 
@@ -150,7 +205,7 @@ class SettingsManager(context: Context) {
 data class TabItem(val title: String, val icon: Painter)
 
 @Composable
-fun TabLayout(settingsManager: SettingsManager, modifier: Modifier = Modifier) {
+fun TabLayout(settingsViewModel: SettingsViewModel, modifier: Modifier = Modifier) {
     val tabs = listOf(
         TabItem("Exercise", painterResource(R.drawable.check_decagram)),
         TabItem("Stats", painterResource(R.drawable.chart_box)),
@@ -169,9 +224,9 @@ fun TabLayout(settingsManager: SettingsManager, modifier: Modifier = Modifier) {
             }
         }
         when (currentTab) {
-            0 -> ExerciseScreen(settingsManager)
-            1 -> StatsScreen(settingsManager)
-            2 -> SettingsScreen(settingsManager)
+            0 -> ExerciseScreen(settingsViewModel)
+            1 -> StatsScreen(settingsViewModel)
+            2 -> SettingsScreen(settingsViewModel)
         }
     }
 }
@@ -186,8 +241,10 @@ fun TabLayout(settingsManager: SettingsManager, modifier: Modifier = Modifier) {
  */
 
 @Composable
-fun ExerciseScreen(settingsManager: SettingsManager) {
-    val settings = settingsManager.loadSettings()
+fun ExerciseScreen(settingsViewModel: SettingsViewModel) {
+    val squeezeSeconds by settingsViewModel.squeezeSecondsFlow.collectAsState()
+    val relaxSeconds by settingsViewModel.relaxSecondsFlow.collectAsState()
+    val repetitions by settingsViewModel.repetitionsFlow.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -196,7 +253,7 @@ fun ExerciseScreen(settingsManager: SettingsManager) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Squeeze ${settings.squeezeSeconds}s  -  Relax ${settings.relaxSeconds}s  -  Times ${settings.repetitions}x",
+                    text = "Squeeze ${squeezeSeconds}s  -  Relax ${relaxSeconds}s  -  Times ${repetitions}x",
                     modifier = Modifier.padding(
                         top = 24.dp,
                         start = 8.dp,
@@ -205,33 +262,26 @@ fun ExerciseScreen(settingsManager: SettingsManager) {
                     )
                 )
                 Text(
-                    text = "Total time for set: " + (settings.repetitions * (settings.squeezeSeconds + settings.relaxSeconds)).toString() + "s",
+                    text = "Total time for set: " + (repetitions * (squeezeSeconds + relaxSeconds)).toString() + "s",
                     modifier = Modifier
                 )
             }
         }
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            ExerciseProgressIndicator(
-                settingsManager,
-                settings.squeezeSeconds,
-                settings.relaxSeconds,
-                settings.repetitions,
-                settings.vibrationEnabled
-            )
+            ExerciseProgressIndicator(settingsViewModel)
         }
     }
 }
 
+
 @Composable
-fun ExerciseProgressIndicator(
-    settingsManager: SettingsManager,
-    squeezeSeconds: Int,
-    relaxSeconds: Int,
-    repetitions: Int,
-    vibrationEnabled: Boolean
-) {
-    val settings by settingsManager.settingsFlow.collectAsState()
+fun ExerciseProgressIndicator(settingsViewModel: SettingsViewModel) {
+    val squeezeSeconds by settingsViewModel.squeezeSecondsFlow.collectAsState()
+    val relaxSeconds by settingsViewModel.relaxSecondsFlow.collectAsState()
+    val repetitions by settingsViewModel.repetitionsFlow.collectAsState()
+    val vibrationEnabled by settingsViewModel.vibrationEnabledFlow.collectAsState()
+
     var progress by remember { mutableFloatStateOf(0f) }
     val animatedProgress by animateFloatAsState(progress, label = "Progress Animation")
 
@@ -275,9 +325,9 @@ fun ExerciseProgressIndicator(
                     // Squeeze phase
                     currentPhase = "Squeeze"
                     vibrate()
-                    for (i in 0..squeezeSeconds) {
+                    for (i in 0 .. squeezeSeconds) {
                         progress = i.toFloat() / squeezeSeconds
-                        currentSeconds = i
+                        currentSeconds = squeezeSeconds - i
                         delay(1000L)
                     }
 
@@ -291,11 +341,13 @@ fun ExerciseProgressIndicator(
                     }
                 }
 
-                val newSettings = settings.copy(
-                    completedSets = settings.completedSets + 1,
-                    totalTime = settings.totalTime + repetitions * (squeezeSeconds + relaxSeconds)
+                // Update the total time and completed sets
+                settingsViewModel.updateSettings(
+                    settingsViewModel.settingsFlow.value.copy(
+                        totalTime = settingsViewModel.settingsFlow.value.totalTime + repetitions * (squeezeSeconds + relaxSeconds),
+                        completedSets = settingsViewModel.settingsFlow.value.completedSets + 1
+                    )
                 )
-                settingsManager.saveSettings(newSettings)
 
                 isRunning = false // End of exercise, reset running state
                 exerciseJob = null
@@ -399,8 +451,9 @@ fun ExerciseProgressIndicator(
 
 
 @Composable
-fun StatsScreen(settingsManager: SettingsManager) {
-    val settings by settingsManager.settingsFlow.collectAsState()
+fun StatsScreen(settingsViewModel: SettingsViewModel) {
+    val completedSets by settingsViewModel.completedSetsFlow.collectAsState()
+    val totalTime by settingsViewModel.totalTimeFlow.collectAsState()
 
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -416,7 +469,7 @@ fun StatsScreen(settingsManager: SettingsManager) {
             Box(contentAlignment = Alignment.Center) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("Completed Sets:", fontSize = 24.sp)
-                    Text("${settings.completedSets}", fontSize = 48.sp)
+                    Text("$completedSets", fontSize = 48.sp)
                 }
             }
         }
@@ -429,9 +482,9 @@ fun StatsScreen(settingsManager: SettingsManager) {
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Total Time:", fontSize = 24.sp)
-                val hours = settings.totalTime / 3600
-                val minutes = (settings.totalTime % 3600) / 60
-                val seconds = settings.totalTime % 60
+                val hours = totalTime / 3600
+                val minutes = (totalTime % 3600) / 60
+                val seconds = totalTime % 60
                 Text(
                     String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds),
                     fontSize = 48.sp
@@ -452,62 +505,99 @@ fun StatsScreen(settingsManager: SettingsManager) {
  */
 
 @Composable
-fun SettingsScreen(settingsManager: SettingsManager) {
-    val settings by settingsManager.settingsFlow.collectAsState()
+fun SettingsScreen(settingsViewModel: SettingsViewModel) {
+    val coroutineScope = rememberCoroutineScope()
+    val squeezeSeconds by settingsViewModel.squeezeSecondsFlow.collectAsState()
+    val relaxSeconds by settingsViewModel.relaxSecondsFlow.collectAsState()
+    val repetitions by settingsViewModel.repetitionsFlow.collectAsState()
+    val vibrationEnabled by settingsViewModel.vibrationEnabledFlow.collectAsState()
+    val soundEnabled by settingsViewModel.soundEnabledFlow.collectAsState()
+    val darkMode by settingsViewModel.darkModeFlow.collectAsState()
 
     SettingsOptionStepper(
         title = "Squeeze Seconds",
-        value = settings.squeezeSeconds,
+        value = squeezeSeconds,
         onValueChange = { newValue ->
-            val newSettings = settings.copy(squeezeSeconds = newValue)
-            settingsManager.saveSettings(newSettings)
+            coroutineScope.launch {
+                settingsViewModel.updateSettings(
+                    settingsViewModel.settingsFlow.value.copy(squeezeSeconds = newValue)
+                )
+            }
         }
     )
 
     SettingsOptionStepper(
         title = "Relax Seconds",
-        value = settings.relaxSeconds,
+        value = relaxSeconds,
         onValueChange = { newValue ->
-            val newSettings = settings.copy(relaxSeconds = newValue)
-            settingsManager.saveSettings(newSettings)
+            coroutineScope.launch {
+                settingsViewModel.updateSettings(
+                    settingsViewModel.settingsFlow.value.copy(relaxSeconds = newValue)
+                )
+            }
         }
     )
 
     SettingsOptionStepper(
         title = "Repetitions",
-        value = settings.repetitions,
+        value = repetitions,
         onValueChange = { newValue ->
-            val newSettings = settings.copy(repetitions = newValue)
-            settingsManager.saveSettings(newSettings)
+            coroutineScope.launch {
+                settingsViewModel.updateSettings(
+                    settingsViewModel.settingsFlow.value.copy(repetitions = newValue)
+                )
+            }
         }
     )
 
     SettingsOptionToggle(
         title = "Vibration",
-        value = settings.vibrationEnabled,
-        onValueChange = { isChecked ->
-            val newSettings = settings.copy(vibrationEnabled = isChecked)
-            settingsManager.saveSettings(newSettings)
+        value = vibrationEnabled,
+        onValueChange = { newValue ->
+            coroutineScope.launch {
+                settingsViewModel.updateSettings(
+                    settingsViewModel.settingsFlow.value.copy(vibrationEnabled = newValue)
+                )
+            }
         }
     )
 
     SettingsOptionToggle(
         title = "Sound",
-        value = settings.soundEnabled,
-        onValueChange = { isChecked ->
-            val newSettings = settings.copy(soundEnabled = isChecked)
-            settingsManager.saveSettings(newSettings)
+        value = soundEnabled,
+        onValueChange = { newValue ->
+            coroutineScope.launch {
+                settingsViewModel.updateSettings(
+                    settingsViewModel.settingsFlow.value.copy(soundEnabled = newValue)
+                )
+            }
         }
     )
 
     SettingsOptionToggle(
         title = "Dark Mode",
-        value = settings.darkMode,
-        onValueChange = { isChecked ->
-            val newSettings = settings.copy(darkMode = isChecked)
-            settingsManager.saveSettings(newSettings)
+        value = darkMode,
+        onValueChange = { newValue ->
+            coroutineScope.launch {
+                settingsViewModel.updateSettings(
+                    settingsViewModel.settingsFlow.value.copy(darkMode = newValue)
+                )
+            }
         }
     )
+
+    Button(
+        onClick = {
+            coroutineScope.launch {
+                settingsViewModel.updateSettings(
+                    settingsViewModel.settingsFlow.value.copy(totalTime = 0, completedSets = 0)
+                )
+            }
+        },
+        modifier = Modifier.padding(24.dp)
+    ) {
+        Text("Reset Stats")
+    }
 }
 
 
